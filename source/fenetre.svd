@@ -1,0 +1,984 @@
+/*
+ * fenetre.cpp
+ * 2023 daniel 
+ */
+#include <iostream>
+#include "fenetre.h"
+Fenetre::Fenetre()
+{
+    pFncAppeloui	= nullptr;
+    pFncAppelnon	= nullptr;
+    bdialogue		= nullptr;
+    dlgcharcontexte	= nullptr;
+    ptrlogTMP		= nullptr;
+    dlgchoixFichierLie	= nullptr;
+	plstchoixdialogue	= nullptr;
+    
+    extern std::string *pCHRacine;
+    
+    pCHRacine = session.ptrCheminRacine();
+    passortir = false;
+
+    if(!CfgMTStartApp.InitialiserConfiguration( session.CheminRacine(), session.NomConfiguration() ))
+    {
+        session.ChangerConfiguration(CfgMTStartApp.ConfigurationEnCours());
+    }
+// création de la liste des variables utilisées par MSA pour la ligne option des lanceurs.
+	fichierdonnees	= Gio::Resource::open_stream_global("/fichiertexte/dgdemlog-phr-var.txt");
+	lignedonnee		= Gio::DataInputStream::create(fichierdonnees);
+		if((lignedonnee->read_line(phrtmp1))&(lignedonnee->read_line(phrtmp2)))
+				CfgMTStartApp.lvarmsa.Ajouter(session.CheminRacine(),phrtmp1,phrtmp2);
+		if((lignedonnee->read_line(phrtmp1))&(lignedonnee->read_line(phrtmp2)))
+				CfgMTStartApp.lvarmsa.Ajouter(session.CheminProjet(),phrtmp1,phrtmp2);
+		if((lignedonnee->read_line(phrtmp1))&(lignedonnee->read_line(phrtmp2)))
+				CfgMTStartApp.lvarmsa.Ajouter(session.CheminContexte(),phrtmp1,phrtmp2);
+		if((lignedonnee->read_line(phrtmp1))&(lignedonnee->read_line(phrtmp2)))
+				CfgMTStartApp.lvarmsa.Ajouter(session.CheminStandard(),phrtmp1,phrtmp2);
+// Load extra CSS file.
+	m_refCssProvider = Gtk::CssProvider::create();
+	Gtk::StyleContext::add_provider_for_display(get_display(), m_refCssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	m_refCssProvider->load_from_resource("/fichiertexte/dgdemlog.css");
+//*******
+    CreerLeMenu();
+    session.ChargerSession();
+    TitreDeLaFenetre();
+    demarreur.InitSession( &session, pscene );
+	if(!session.oksession())
+	{
+		MessageInfo(session.LibelleErreur());
+	}
+	ChargerUnContexte();
+	show();
+}
+Fenetre::~Fenetre()
+{
+	if(bdialogue!=nullptr) delete bdialogue;
+	if(messagemsa!=nullptr) delete bdialogue;
+	if(dlgcharcontexte!=nullptr) delete dlgcharcontexte;
+	if(dlgchoixprio!=nullptr) delete dlgchoixprio;
+	if(dlgchoixFichierLie!=nullptr) delete dlgchoixFichierLie;
+	if( plstchoixdialogue!=nullptr ) ViderListeChoix();
+}
+void Fenetre::Quitter()
+{
+	ImageAlternative(2,false);
+	pFncAppeloui = &Fenetre::close; 
+	pFncAppelnon=nullptr;
+	QuestionOuiNon( "Fermeture de l'application.","Voulez-vous quitter : Oui/Non ?" );
+}
+/**
+	SLOTS
+**/
+void Fenetre::NouveauProjet()
+{
+//	MessageInfo("projet nouveau");
+    //session.SauverEnrgProjet();
+    //quitter->setIcon(QIcon(QPixmap(":/icone/quitter2.png")));
+    session.CreerNouveauProjet(0);
+    //ChangerContexte( "création d'un nouveau projet" );
+}
+void Fenetre::NouveauContexte()
+{
+//	MessageInfo("contexte nouveau");
+    //session.SauverEnrgProjet();
+    //quitter->setIcon(QIcon(QPixmap(":/icone/quitter2.png")));
+    session.CreerNouveauContexte(0);
+    ChangerContexte( "création d'un nouveau contexte" );
+}
+void Fenetre::ChoisirContexte( uint8_t valrt )
+{
+    session.SauverEnrgProjet();
+    //quitter->setIcon(QIcon(QPixmap(":/icone/quitter2.png")));
+	if(valrt==0)
+	{
+		if( dlgcharcontexte!=nullptr ) delete dlgcharcontexte;
+		dlgcharcontexte = new ChargerContexte( session.pFichierProjet() );
+		dlgcharcontexte->ConnexionRetour(sigc::mem_fun(*this, &Fenetre::ChoisirContexte));
+	}
+	else
+	{
+		if(dlgcharcontexte!=nullptr)
+		{
+			if(valrt==1)
+			{
+				phrtmp1.clear();
+				phrtmp2.clear();
+				dlgcharcontexte->Collationner( phrtmp1, phrtmp2 );
+				if(!(phrtmp1.compare( session.NomDuProjet())==0 && phrtmp2.compare( session.NomDuContexte())==0))
+				{
+					if(session.ChargerSession( phrtmp1, phrtmp2 ))
+					{
+						TitreDeLaFenetre();
+						NettoyerLaScene();
+						ChargerUnContexte();
+					}
+					else
+						MessageInfo( session.LibelleErreur() );
+				}
+			}
+			delete dlgcharcontexte;
+			dlgcharcontexte=nullptr;
+		}
+	}
+}
+void Fenetre::Sauvegarder()
+{
+	ImageAlternative(2,false);
+	ImageAlternative(0,false);
+    EnregistrerContexte();
+    session.Enregistrer();
+}
+void Fenetre::Configuration()
+{
+    CfgMTStartApp.GestionConfiguration( 0 );
+}
+void Fenetre::AjouterLogiciel( uint16_t cas )
+{
+    uint8_t mnu = cas/100;
+    uint8_t rng = cas - mnu*100;
+    
+    if( CfgMTStartApp.PointerLogiciel( mnu, rng ))
+		CreerLeGrapheLogiciel(0);
+    else
+        MessageInfo( Glib::ustring::compose("Il n'existe pas de logiciel pointé par %1 - %2", mnu, rng) );
+}
+void Fenetre::FichiersLies( uint8_t cas )
+{
+    Element *pelem = pscene->LogicielSelectionne();
+    if(pelem==NULL)
+		MessageInfo( "l'objet sélectionné n'est pas un logiciel !" );
+    else
+    {
+        ptrlogTMP = (Logiciel *)pelem;
+        FichierLie *testlie = ptrlogTMP->PtrFicLie( cas );
+        if(testlie==NULL)
+			CreerLeGrapheFichierLie( cas );
+        else
+        {
+			phrtmp1 = "le fichier -- ";
+			phrtmp1 += testlie->NomElement();
+			phrtmp1 += " -- lié à ce logiciel est déjà sur scène !";
+			MessageInfo(phrtmp1);
+		}
+    }
+}
+void Fenetre::LierDesObjets()
+{
+    GraphiqueSurface *pelem = pscene->ObjetSelectionne();
+    if( pelem!=nullptr )
+    {
+		switch(pelem->GenreElement())
+		{
+			case 200 :
+				MessageInfo("L'objet est un fichier travail !");
+				break;
+			case 300 :
+					MessageInfo("L'objet est un fichier configuration !");
+				break;
+			case 1000 :
+					MessageInfo("L'objet est une ancre !");
+				break;
+			case 5000 :
+					MessageInfo("L'objet est une liaison !");
+				break;
+			case 9999 :
+					MessageInfo("Objet non ancrable !");
+				break;
+			 default :{
+//						if(psymboleancre!=nullptr)
+//						{
+//							psymboleancre->Nettoyerconnexion();
+//							pscene->Supprimer( psymboleancre );
+//							delete psymboleancre;
+//						}
+						Logiciel *ptrlogTMP = (Logiciel *)pelem;
+						psymboleancre = new Ancrage( pelem, &CfgMTStartApp );
+						pscene->AjouterElement( psymboleancre );
+						ptrlogTMP->EntrerUneAncre( psymboleancre,pelem, CfgMTStartApp.PointeurCo(0));
+						pscene->AjouterElement( ptrlogTMP->ValeurConnexion() );
+				}
+		}
+    }
+    else
+        MessageInfo("L'objet au départ de la liaison n'est pas sélectionné!");
+}
+void Fenetre::CreerLeGrapheLogiciel( uint8_t valrt )
+{
+	if( valrt == 0 )
+	{
+		DGChaineListe			lstinfo;
+		if( CfgMTStartApp.ListeLabelPriorites( lstinfo ))
+		{
+			if(dlgchoixprio!=nullptr) delete dlgchoixprio;
+			dlgchoixprio = new ChoisirPriorite( lstinfo );
+			dlgchoixprio->ConnexionRetour(sigc::mem_fun(*this, &Fenetre::CreerLeGrapheLogiciel));
+		}
+	}
+	else
+	{
+		if(dlgchoixprio!=nullptr)
+		{
+			uint8_t valeur = dlgchoixprio->Collationner();
+			delete dlgchoixprio;
+			dlgchoixprio=nullptr;
+			if( valrt==1 )
+			{
+				Logiciel *pobjet = new Logiciel( &CfgMTStartApp, pscene, valeur );
+				if(!pobjet->okvalide)
+					delete pobjet;
+				else
+					if( AjouterElement( pobjet ))
+					{
+						//AjouterFichierCfg( pobjet, penrgCtx );
+					}
+					else
+					{
+						MessageInfo("le logiciel n'est pas ajouté");
+						delete pobjet;
+					}
+			}
+		}
+	}
+}
+void Fenetre::CreerLeGrapheFichierLie( uint16_t valrt )//valrt : 2-travail 3-configuration 200-retour travail 300-retour configuration 
+{
+	if( valrt < 100 )
+	{
+		if(dlgchoixFichierLie!=nullptr) delete dlgchoixFichierLie;
+		dlgchoixFichierLie = new ChoisirFichierLie( ptrlogTMP , valrt*100, session.CheminContexte() );
+		dlgchoixFichierLie->ConnexionRetour( sigc::mem_fun( *this, &Fenetre::CreerLeGrapheFichierLie ) );
+	}
+	else
+	{
+		if( dlgchoixFichierLie!=nullptr )
+		{
+			if(ptrlogTMP!=nullptr)
+			{
+				if( dlgchoixFichierLie->OkCreation() )
+				{
+					if( valrt>100 )
+					{
+						ptrficlie = new FichierLie( &CfgMTStartApp, pscene );
+						if( ptrficlie->InitNomFichier( dlgchoixFichierLie->Collationner() ) )
+						{
+							switch(valrt)
+							{
+								case 200 : ptrficlie->InitFichierLie( 200, "fichier travail", "/icone/fictrv.png" );break;
+								case 300 : ptrficlie->InitFichierLie( 300, "fichier configuration", "/icone/ficcfg.png" );break;
+							}
+							pscene->AjouterElement ( ptrficlie );
+							ptrlogTMP->ConnecterElement( ptrficlie );
+						}
+						else
+						{
+							MessageInfo( "le fichier n'est pas ajouté." );
+							delete ptrficlie;
+						}
+					}
+					else
+						MessageInfo( "la valeur de retour est invalide." );
+				}
+			}
+			else
+				MessageInfo( "le logiciel est invalidé." );
+
+			delete dlgchoixFichierLie;
+			dlgchoixFichierLie = nullptr;
+		}
+		ptrlogTMP = nullptr;
+		ptrficlie = nullptr;
+	}
+}
+void Fenetre::RechargerSession()
+{
+    if( session.oksession() )
+        ChargerUnContexte();
+    else
+        MessageInfo( session.LibelleErreur() );
+}
+void Fenetre::ChangerContexte( const std::string valeur )
+{
+	phrtmp1.clear();
+    if( !session.oksession() )
+    {
+//        messagemsa->AlerteMessage( valeur, session.LibelleErreur() );
+        MessageInfo(session.LibelleErreur());
+//        session.RestaurerEnrgProjet();
+    }
+    else
+    {
+		if(plstchoixdialogue!=nullptr)
+			ViderListeChoix();
+		plstchoixdialogue = new std::vector<std::string>;
+		plstchoixdialogue->push_back("Le sauvegarder");
+		plstchoixdialogue->push_back("NE PAS le sauvegarder");
+		plstchoixdialogue->push_back("Rester dans le contexte en cours");
+
+		pFncRetourValeur = &Fenetre::reponse_choix_contexte; 
+		pFncAppeloui = nullptr; 
+		pFncAppelnon = &Fenetre::PasDeChoix;
+		QuestionChoix( "Un contexte est en cours :", 0 );
+    }
+//    quitter->setIcon(QIcon(QPixmap(":/icone/quitter1.png")));
+}
+void Fenetre::reponse_choix_contexte( uint8_t vchoix )
+{
+	pFncAppelnon, pFncRetourValeur  = nullptr;
+	 switch(vchoix)
+	{
+		case 0 ://0 sauver ancien et charger nouveau
+				session.ReserverEnrgProjet();
+				session.RestaurerEnrgProjet();
+				EnregistrerContexte();
+				session.RetablirEnrgProjet();
+			[[fallthrough]];
+		case 1 ://1 quitter ancien sans sauver et charger nouveau
+				TitreDeLaFenetre();
+				ChargerUnContexte();
+			break;
+		case 2 ://2 garder ancien
+				session.RestaurerEnrgProjet();
+			break;
+	}
+	ViderListeChoix();
+}
+bool Fenetre::ChargerUnContexte()
+{
+	FBlocObjetContexte  ficobjetctx( session.CheminProjet() );
+	if(ficobjetctx.FichierExiste())
+    {
+        if(ficobjetctx.LireObjetContexte( session.NomDuContexte() ))
+        {
+			NettoyerLaScene();
+			uint32_t indexencours;
+			uint32_t indexmax = ficobjetctx.MaxObjet();
+			std::vector<GraphObjetActif*> lstobjettmp;
+			for( indexencours=0; indexencours<indexmax; indexencours++ )
+			{
+				ficobjetctx.PointerObjet( indexencours );
+				AjouterObjetContexte( ficobjetctx.PtrEnrgObj()->Donnees() );
+				if( ptrlogTMP!=nullptr )
+					lstobjettmp.push_back( ptrlogTMP );
+			}
+			ptrlogTMP = nullptr;
+			if( lstobjettmp.size()>0 )
+			{
+				indexencours=0;
+				indexmax = ficobjetctx.MaxLiaison();
+				for( indexencours=0; indexencours<indexmax; indexencours++ )
+				{
+					ficobjetctx.PointerLiaison( indexencours );
+					lstobjettmp.at( ficobjetctx.PtrEnrgLia()->ValeurSource())->ConnecterElement(
+									lstobjettmp.at(ficobjetctx.PtrEnrgLia()->ValeurCible())
+								);
+				}
+				return true;
+			}
+        }
+    }
+    return false;
+}
+void Fenetre::EnregistrerContexte()
+{
+	FBlocObjetContexte  ficobjetctx( session.CheminProjet() );
+	if(ficobjetctx.ContexteExiste( session.NomDuContexte() ))
+	{
+		pFncAppeloui = &Fenetre::EcrireContexte; 
+		pFncAppelnon = &Fenetre::Rallumer; 
+		QuestionOuiNon( "Le contexte existe.","Voulez-vous le modifier : Oui/Non ?" );
+	}
+	else
+		EcrireContexte();
+}
+void Fenetre::Rallumer()
+{
+	pFncAppeloui = nullptr;
+	pFncAppelnon = nullptr;
+	ImageAlternative( 2, true );
+	ImageAlternative( 0, true );
+}
+void Fenetre::RallumerSup()
+{
+	pFncAppeloui = nullptr;
+	pFncAppelnon = nullptr;
+	ImageAlternative( 2, true );
+	ImageAlternative( 1, true );
+}
+void Fenetre::EcrireContexte()
+{
+	pFncAppeloui = nullptr;
+	pFncAppelnon = nullptr;
+	FBlocObjetContexte  ficobjetctx( session.CheminProjet() );
+	std::vector<GraphiqueSurface*> lstobjet;
+	std::vector<GraphiqueSurface*> lstliaison;
+	pscene->CollecterGenreObjet( 100, lstobjet );
+	pscene->CollecterGenreObjet( 5000, lstliaison );
+	uint32_t i;
+	for( i=0; i<lstobjet.size(); i++ )
+	{
+		ptrlogTMP = (Logiciel*)lstobjet.at(i);
+		ptrlogTMP->CollationnerDescripteur( ficobjetctx.PtrEnrgObj() );
+		ficobjetctx.AjouterObjet();
+	}
+	GraphiqueSurface *psourcetmp, *pcibletmp = nullptr;
+	for( i=0; i<lstliaison.size(); i++ )
+	{
+		ptrconTMP	= (Connexion*)lstliaison.at(i);
+		if(	
+			((psourcetmp = ptrconTMP->ValeurSource()) != nullptr ) 
+		   && 
+			((pcibletmp = ptrconTMP->ValeurCible()) != nullptr )
+		  )
+		{
+			if( psourcetmp->GenreElement() == pcibletmp->GenreElement() )
+			{
+				ficobjetctx.PtrEnrgLia()->Raz();
+				uint8_t	oktrouve = 0;
+				std::vector<GraphiqueSurface*>::iterator ctmp;
+				for ( ctmp = lstobjet.begin() ; ctmp != lstobjet.end(); ++ctmp)
+				{
+					if( *ctmp==psourcetmp )
+					{
+						ficobjetctx.PtrEnrgLia()->ValeurSource(ctmp-lstobjet.begin());
+						oktrouve++;
+					}
+					if( *ctmp==pcibletmp )
+					{
+						ficobjetctx.PtrEnrgLia()->ValeurCible(ctmp-lstobjet.begin());
+						oktrouve++;
+					}
+				}
+				if(oktrouve==2)
+					ficobjetctx.AjouterLiaison();
+			}
+		}
+	}
+	ficobjetctx.EcrireObjetContexte( session.NomDuContexte() );
+	ImageAlternative(2,true);
+	ImageAlternative(0,true);
+}
+void Fenetre::AjouterObjetContexte(  const DonneesContexte &valctx  )
+{
+	ptrlogTMP = new Logiciel( &CfgMTStartApp, pscene, valctx );
+	if(!ptrlogTMP->okvalide)
+		delete ptrlogTMP;
+	else
+	{
+		pscene->AjouterElement ( ptrlogTMP );
+		if( valctx.fictrv.v[0]!=0 )
+		{
+			FichierLie *pobjetlie = new FichierLie( &CfgMTStartApp, pscene );
+			if(pobjetlie->InitFichierLie( 200, valctx ))
+			{
+				pscene->AjouterElement ( pobjetlie );
+				ptrlogTMP->ConnecterElement( pobjetlie );
+			}
+			else
+				delete pobjetlie;
+		}
+		if( valctx.ficcfg.v[0]!=0 )
+		{
+			FichierLie *pobjetlie = new FichierLie( &CfgMTStartApp, pscene );
+			if(pobjetlie->InitFichierLie( 300, valctx ))
+			{
+				pscene->AjouterElement ( pobjetlie );
+				ptrlogTMP->ConnecterElement( pobjetlie );
+			}
+			else
+				delete pobjetlie;
+		}
+	}
+}
+bool Fenetre::AjouterElement( Logiciel *pvaleur )
+{
+	if( pvaleur->VerifierExistenceSurScene() )
+	{
+		phrtmp1 = "Ce ";
+		phrtmp1 += pvaleur->libelle();
+		phrtmp1 += " est déjà sur scène !";
+		MessageInfo(phrtmp1);
+		return false;
+	}
+	pscene->AjouterElement ( pvaleur );
+	return true;
+}
+void Fenetre::SupprimerObjet()
+{
+	ImageAlternative( 2, false );
+	ImageAlternative( 1, false );
+    if( pscene->UnObjetEstSelectionne() )
+	{
+		phrtmp1 = "L'objet sélectionné est : ";
+		phrtmp1 += pscene->ObjetSelectionne()->NomElement();
+		phrtmp1 += ".";
+		pFncAppeloui = &Fenetre::SupprimerUnObjet; 
+		pFncAppelnon = &Fenetre::RallumerSup; 
+		QuestionOuiNon( phrtmp1, "Etes-vous certain de supprimer cet objet : Oui/Non ?" );
+	}
+    else
+		MessageInfo( "Aucun objet sélectionné pour la suppression !" );
+}
+void Fenetre::SupprimerTout()
+{
+	//passortir    = true;
+    //quitter->setIcon(QIcon(QPixmap(":/icone/quitter2.png")));
+    //supprimer->setIcon(QIcon(QPixmap(":/icone/supprimer2.png")));
+    if(pscene->PasDobjetEnScene())
+    {
+		MessageInfo( "La scène est vide !" );
+	}
+	else
+	{
+		pFncAppeloui = &Fenetre::NettoyerLaScene; 
+		pFncAppelnon = nullptr;
+		QuestionOuiNon( "La suppression est irréversible.", "Etes-vous certain de supprimer les objets : Oui/Non ?" );
+	}
+    //quitter->setIcon(QIcon(QPixmap(":/icone/quitter1.png")));
+    //supprimer->setIcon(QIcon(QPixmap(":/icone/supprimer1.png")));
+    //passortir    = false;
+}
+void Fenetre::SupprimerUnObjet()
+{
+	pFncAppeloui = nullptr;
+	pFncAppelnon = nullptr;
+    GraphiqueSurface *pelem = pscene->ObjetSelectionne();
+    switch(pelem->GenreElement())
+    {
+    case    100:{
+			ptrlogTMP = (Logiciel *)pelem;
+			ptrficlie = ptrlogTMP->PtrFicLie(2);
+			SupprimerFichierLie();
+			ptrficlie = ptrlogTMP->PtrFicLie(3);
+			SupprimerFichierLie();
+			ptrlogTMP->SupprimerLesConnexions();
+			pscene->Supprimer(pelem);
+			ptrficlie = nullptr;
+       }break;
+    case    200:
+    case    300:
+		ptrficlie = (FichierLie *)pelem;
+		SupprimerFichierLie();
+        break;
+    default :
+   		phrtmp1 = "L'objet : ";
+		phrtmp1 += pscene->ObjetSelectionne()->NomElement();
+		phrtmp1 += " n'est pas traitable.";
+        MessageInfo( phrtmp1 );
+    }
+}
+void Fenetre::SupprimerFichierLie()
+{
+	if( ptrficlie != nullptr )
+	{
+		ptrficlie->SupprimerLesConnexions();
+		pscene->Supprimer( ptrficlie );
+	}
+}
+void Fenetre::NettoyerLaScene()
+{
+//        quitter->setIcon(QIcon(QPixmap(":/icone/quitter2.png")));
+	pscene->Nettoyer();
+//        quitter->setIcon(QIcon(QPixmap(":/icone/quitter1.png")));
+
+}
+void Fenetre::ImageAlternative( uint8_t index, bool sens )
+{
+	if(index<lstbtnimgalt.size())
+	{
+		if(sens)
+		{
+			lstobjimage.at(index)->set(lstimgpixbuf.at(index));
+		//Gtk::Image imagebouton(image);
+			//imagebouton.set_pixel_size(CfgMTStartApp.HtrIcoGes());
+			//imagebouton.set_name("tourimage");
+		//sauvegarder->set_child(imagebouton);
+//			lstbtnimgalt.at(index)->set_child( *quitter1 );
+		}
+		else
+		{
+			lstobjimage.at(index)->set(lstimgpixbuf.at(index+lstbtnimgalt.size()-1));
+//			lstbtnimgalt.at(index)->set_child( *quitter2 );
+		}
+	}
+}
+
+//void Fenetre::ChangerImageQuitter( bool cote )
+//{
+	//if(cote)
+		//phrtmp1 = "/icone/quitter1.png";
+	//else
+		//phrtmp1 = "/icone/quitter2.png";
+	//Glib::RefPtr<Gdk::Pixbuf> image = Gdk::Pixbuf::create_from_resource(phrtmp1);//resobjetactif_get_resource
+		//Gtk::Image imagebouton(image);
+			//imagebouton.set_pixel_size(CfgMTStartApp.HtrIcoGes());
+			//imagebouton.set_name("tourimage");
+		//quitter->set_child(imagebouton);
+//}
+//void Fenetre::ChangerImageSauver( bool cote )
+//{
+	//if(cote)
+		//phrtmp1 = "/icone/sauvegarder1.png";
+	//else
+		//phrtmp1 = "/icone/sauvegarder2.png";
+	//Glib::RefPtr<Gdk::Pixbuf> image = Gdk::Pixbuf::create_from_resource(phrtmp1);//resobjetactif_get_resource
+		//Gtk::Image imagebouton(image);
+			//imagebouton.set_pixel_size(CfgMTStartApp.HtrIcoGes());
+			//imagebouton.set_name("tourimage");
+		//sauvegarder->set_child(imagebouton);
+	//ChangerImageQuitter( cote );
+//}
+//void Fenetre::ChangerImageSupprimer( bool cote )
+//{
+	//if(cote)
+		//phrtmp1 = "/icone/supprimer1.png";
+	//else
+		//phrtmp1 = "/icone/supprimer2.png";
+	//Glib::RefPtr<Gdk::Pixbuf> image = Gdk::Pixbuf::create_from_resource(phrtmp1);//resobjetactif_get_resource
+		//Gtk::Image imagebouton(image);
+			//imagebouton.set_pixel_size(CfgMTStartApp.HtrIcoGes());
+			//imagebouton.set_name("tourimage");
+		//supprimer->set_child(imagebouton);
+	//ChangerImageQuitter( cote );
+//}
+
+/*******************************************
+ Zone des Initialisation affichage et menus
+*******************************************/
+void Fenetre::close()
+{
+	EnregistrerContexte();
+	session.Enregistrer();
+	Gtk::Window::close();
+}
+void Fenetre::TitreDeLaFenetre()
+{
+    phrtmp1.clear();
+	phrtmp1.append("Démarreur multi applications -- session : ");
+    if(session.oksession())
+	{
+		phrtmp1.append(session.NomDuProjet());
+		phrtmp1.append("  contexte : ");
+		phrtmp1.append(session.NomDuContexte());
+	}
+	else
+	{
+		phrtmp1.append("projet non-défini");
+	}
+	set_title(phrtmp1);
+}
+void Fenetre::CreerLeMenu()
+{
+    this->set_name("fenappli");
+ 	auto zonetotal = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::HORIZONTAL );
+ 		zonetotal->set_margin(8);
+ 		
+	auto zonecentrale = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::VERTICAL, 5 );
+		zonecentrale->set_expand(true);
+    
+		pscene = new ZoneGraphique;
+		pscene->set_expand(true);
+		pscene->set_name("zonegraphe");
+
+			auto controle = Gtk::GestureClick::create();
+				controle->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+				controle->set_button(1);
+				controle->signal_pressed().connect(sigc::mem_fun(*pscene, &ZoneGraphique::AppuyerSouris));
+				controle->signal_released().connect(sigc::mem_fun(*pscene, &ZoneGraphique::LacherSouris),true);
+			auto controledroit = Gtk::GestureClick::create();
+				controledroit->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+				controledroit->set_button(3);
+				controledroit->signal_pressed().connect(sigc::mem_fun(*pscene, &ZoneGraphique::ChoisirObjet));
+
+			auto controlebouge = Gtk::EventControllerMotion::create();
+				controlebouge->signal_motion().connect(sigc::mem_fun(*pscene, &ZoneGraphique::SourisBouge));
+
+			pscene->add_controller(controle);
+			pscene->add_controller(controledroit);
+			pscene->add_controller(controlebouge);
+			pscene->set_margin(10);
+			
+	auto barrehaute = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::HORIZONTAL, 5 );
+		barrehaute->set_valign(Gtk::Align::START);
+		barrehaute->set_halign(Gtk::Align::CENTER);
+		barrehaute->set_name("barreicon");
+		
+	zonecentrale->append(*barrehaute);
+	zonecentrale->append(*pscene);
+		
+	auto barredroite = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::VERTICAL, 5 );
+		barredroite->set_halign(Gtk::Align::END);
+		barredroite->set_valign(Gtk::Align::CENTER);
+		barredroite->set_name("barreicon");
+ 
+	auto barredroitehaut = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::VERTICAL, 5 );
+		barredroitehaut->set_hexpand(false);
+		barredroitehaut->set_valign(Gtk::Align::START);
+		barredroitehaut->set_margin(5);
+	auto barredroitebas = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::VERTICAL, 5 );
+		barredroitebas->set_expand(false);
+		barredroitebas->set_valign(Gtk::Align::END);
+		barredroitebas->set_margin(5);
+		
+		
+	auto barregauche = Gtk::make_managed<Gtk::Box>( Gtk::Orientation::VERTICAL, 2 );
+		barregauche->set_expand(false);
+		barregauche->set_halign(Gtk::Align::START);
+		barregauche->set_valign(Gtk::Align::START);
+		
+	zonegauche = Gtk::make_managed<Gtk::Grid>();
+		zonegauche->set_halign(Gtk::Align::START);
+		zonegauche->set_valign(Gtk::Align::START);
+		zonegauche->set_name("barreicon");
+		
+	barregauche->append(*zonegauche);
+
+	zonetotal->append(*barregauche);
+	zonetotal->append(*zonecentrale);
+	zonetotal->append(*barredroite);
+	
+	set_child( *zonetotal );
+	
+/**
+ * 
+ * Barre d'icônes à droite 
+ * 
+**/
+    int hticodrt = CfgMTStartApp.HtrIcoGes();
+//    int hticodrt	= 40;
+    fichierdonnees	= Gio::Resource::open_stream_global("/fichiertexte/dgdemlog-phr-menu.txt");
+	lignedonnee		= Gio::DataInputStream::create(fichierdonnees);
+
+	CreerBoutonImage( hticodrt, barredroitehaut );
+	CreerBoutonImage( hticodrt, barredroitehaut );
+	CreerBoutonImage( hticodrt, barredroitehaut );
+/**	
+	if( CreerBoutonImage( hticodrt, barredroitehaut ) )
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::LancerContexteEnCours) );
+	if( CreerBoutonImage( hticodrt, barredroitehaut ) )
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::StopperTout) );
+	if( CreerBoutonImage( hticodrt, barredroitehaut ) )
+		trboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::AProposDe) );
+**/
+	if(CreerBoutonImage( hticodrt, barredroitehaut ))
+		ptrboutontmp->signal_clicked().connect(sigc::bind( sigc::mem_fun(*this, &Fenetre::ChoisirContexte), 0 ));
+	if(CreerBoutonImage(hticodrt, barredroitehaut ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::NouveauProjet) );
+	if( CreerBoutonImage( hticodrt,  barredroitehaut ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::NouveauContexte) );
+	if(CreerBoutonImage( hticodrt, barredroitehaut, true ))
+	{
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::Sauvegarder) );
+	}
+	if(CreerBoutonImage( hticodrt, barredroitehaut,true ))
+	{
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::SupprimerObjet) );
+	}
+	if( CreerBoutonImage( hticodrt, barredroitehaut ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::SupprimerTout) );
+	if(CreerBoutonImage( hticodrt, barredroitebas ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::Configuration) );
+	if(CreerBoutonImage( hticodrt, barredroitebas, true ))
+	{
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::Quitter) );
+	}
+	barredroite->append(*barredroitehaut);
+	barredroite->append(*barredroitebas);
+/**
+ * 
+ * Barre d'icônes au-dessus 
+ * 
+**/
+    int hticohaut	= CfgMTStartApp.HtrIcoDessus();
+	if(CreerBoutonImage( hticohaut, barrehaute ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::LierDesObjets) );
+	if(CreerBoutonImage( hticohaut, barrehaute ))
+		ptrboutontmp->signal_clicked().connect(sigc::bind( sigc::mem_fun(*this, &Fenetre::FichiersLies),3));
+	if(CreerBoutonImage( hticohaut, barrehaute ))
+		ptrboutontmp->signal_clicked().connect(sigc::bind( sigc::mem_fun(*this, &Fenetre::FichiersLies),2));
+		
+	CreerBoutonImage( hticohaut, barrehaute );
+/**	
+	if(CreerBoutonImage( hticohaut, barrehaute ))
+		ptrboutontmp->signal_clicked().connect( sigc::mem_fun(*this, &Fenetre::CentrerSchema) );
+**/
+/**
+ * 
+ * Barre d'icônes à gauche
+ * 
+**/
+	BarreBoutonLogiciel();
+}
+void Fenetre::BarreBoutonLogiciel()
+{
+	std::vector<uint8_t> lstclasse;
+    lstbtnlogiciel.clear();
+    if( CfgMTStartApp.ListeDesClassesLogiciels( lstclasse, true ) )
+    {
+        uint8_t hticogah = CfgMTStartApp.HtrIcoLog();
+		std::vector<ptrenrglogiciel> lstptrlog;
+        for(uint8_t indexcol=0; indexcol<lstclasse.size(); indexcol++ )
+        {
+			ptmplogiciel = NULL;
+			if( CfgMTStartApp.CollecterLogicielDeLaClasse( lstclasse[indexcol], lstptrlog ) )
+			{
+				for( uint8_t indexligne = 0; indexligne<lstptrlog.size(); indexligne++ )
+				{
+					ptmplogiciel = lstptrlog[indexligne];
+					Gtk::Button *tmpbtn = CreerBoutonLogiciel( indexcol, indexligne );
+					tmpbtn->signal_clicked().connect(sigc::bind(sigc::mem_fun(*this, &Fenetre::AjouterLogiciel),indexcol*100+indexligne ));
+					lstbtnlogiciel.push_back(tmpbtn);
+				}
+			}
+        }
+    }
+}
+bool Fenetre::CreerBoutonImage( int dimimage, Gtk::Box *barreattache, bool img_alternat )
+{
+	ptrboutontmp = nullptr;
+	if((lignedonnee->read_line(phrtmp1))&&(lignedonnee->read_line(phrtmp2)))
+	{
+		ptrboutontmp = Gtk::make_managed<Gtk::Button>(phrtmp1);
+			ptrboutontmp->set_expand(false);
+			ptrboutontmp->set_tooltip_text(phrtmp2);
+			ptrboutontmp->set_margin(4);
+			ptrboutontmp->set_name("icone01");
+		barreattache->append(*ptrboutontmp);
+		if(img_alternat)
+		{
+			ptrimgpixbuftmp = Gdk::Pixbuf::create_from_resource(phrtmp1);//resobjetactif_get_resource
+			if(ptrimgpixbuftmp!=nullptr)
+			{
+				lstbtnimgalt.push_back(ptrboutontmp);
+				lstimgpixbuf.push_back(ptrimgpixbuftmp);
+				ptrimagetmp = Gtk::make_managed<Gtk::Image>(ptrimgpixbuftmp);
+					ptrimagetmp->set_pixel_size(dimimage);
+					ptrimagetmp->set_name("tourimage");
+				ptrboutontmp->set_child(*ptrimagetmp);
+				lstobjimage.push_back(ptrimagetmp);
+				phrtmp2 = phrtmp1;
+				std::size_t position = phrtmp1.find_last_of("/\\");
+				if( position!=std::string::npos )
+					phrtmp2.replace( position+1, 0,"alt_" );
+				ptrimgpixbuftmp = Gdk::Pixbuf::create_from_resource(phrtmp2);//resobjetactif_get_resource
+				lstimgpixbuf.push_back(ptrimgpixbuftmp);
+				//if(ptrimgpixbuftmp!=nullptr)
+				//{
+					//ptrimagetmp = Gtk::make_managed<Gtk::Image>(ptrimgpixbuftmp);
+						//ptrimagetmp->set_pixel_size(dimimage);
+						//ptrimagetmp->set_name("tourimage");
+				//}
+			}
+		}
+		else
+		{
+			Glib::RefPtr<Gdk::Pixbuf> image = Gdk::Pixbuf::create_from_resource(phrtmp1);//resobjetactif_get_resource
+			Gtk::Image imagebouton(image);
+				imagebouton.set_pixel_size(dimimage);
+				imagebouton.set_name("tourimage");
+				ptrboutontmp->set_child(imagebouton);
+		}
+	}
+	return ptrboutontmp!=nullptr;
+}
+Gtk::Button *Fenetre::CreerBoutonLogiciel( int posx, int posy )
+{
+	Glib::RefPtr<Gdk::Pixbuf> image = Gdk::Pixbuf::create_from_file( ptmplogiciel->Icone() );//resobjetactif_get_resource
+	Gtk::Image imagebouton( image );
+		imagebouton.set_pixel_size( CfgMTStartApp.HtrIcoLog() );
+		imagebouton.set_name( "tourimage" );
+	Gtk::Button *ptrbouton = Gtk::make_managed<Gtk::Button>( ptmplogiciel->NomClair() );
+		ptrbouton->set_expand( false );
+		ptrbouton->set_child( imagebouton );
+		ptrbouton->set_tooltip_text( ptmplogiciel->Aide() );
+		ptrbouton->set_margin( 4 );
+		ptrbouton->set_name( "icone01" );
+		ptrbouton->set_margin_end( 6 );
+		zonegauche->attach( *ptrbouton, posx, posy );
+	return ptrbouton;
+}
+/**
+ * 
+ * Routine en relation avec MessageMSA
+ * 
+**/
+void Fenetre::ViderListeChoix()
+{
+	plstchoixdialogue->clear();
+	delete plstchoixdialogue;
+	plstchoixdialogue=nullptr;
+}
+void Fenetre::PasDeChoix()
+{
+	ViderListeChoix();
+	pFncAppelnon, pFncRetourValeur  = nullptr;
+}
+void Fenetre::MessageInfo( const Glib::ustring &libmess )
+{
+	if(libmess.empty())
+	{
+		if(bdialogue!=nullptr)
+		{
+		  delete bdialogue;
+		  bdialogue=nullptr;
+		}
+	}
+	else
+	{
+		if(bdialogue!=nullptr) delete bdialogue;
+		bdialogue = new MessageMSA;
+		bdialogue->AppelInfo(this,libmess);
+		bdialogue->connexionInfo(sigc::mem_fun(*this, &Fenetre::MessageInfo));
+	}
+}
+void Fenetre::QuestionOuiNon(const Glib::ustring& libmess,const Glib::ustring& libques)
+{
+	if(libques.empty())
+	{
+		if(bdialogue!=nullptr)
+		{
+			delete bdialogue;
+			bdialogue=nullptr;
+			if(libmess=="OK")
+				(this->*pFncAppeloui)();
+			else
+				if(pFncAppelnon!=nullptr)
+					(this->*pFncAppelnon)();
+		}
+	}
+	else
+	{
+		if(bdialogue!=nullptr) delete bdialogue;
+		bdialogue = new MessageMSA;
+		bdialogue->AppelQuestion(this,libques,libmess);
+		bdialogue->connexionQuest(sigc::mem_fun(*this, &Fenetre::QuestionOuiNon));
+	}
+}
+void Fenetre::QuestionChoix( const Glib::ustring& libmess, const uint8_t &rtbtn )
+{
+	if( libmess.empty() )
+	{
+		if( bdialogue!=nullptr )
+		{
+			uint8_t valrt = bdialogue->Index();
+			delete bdialogue;
+			bdialogue=nullptr;
+			if(rtbtn==1)
+			{
+				if(pFncAppeloui!=nullptr)
+					(this->*pFncAppeloui)();
+				else
+					(this->*pFncRetourValeur)(valrt);
+			}
+			else
+				if( pFncAppelnon!=nullptr )
+					(this->*pFncAppelnon)();
+		}
+	}
+	else
+	{
+		if(bdialogue!=nullptr) delete bdialogue;
+		bdialogue = new MessageMSA;
+		bdialogue->AppelChoix( this, libmess, plstchoixdialogue );
+		bdialogue->connexionChoix(sigc::mem_fun(*this, &Fenetre::QuestionChoix));
+	}
+}

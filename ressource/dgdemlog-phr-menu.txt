@@ -1,0 +1,37 @@
+/icone/demarre.png
+Démarrer le dernier contexte (ou celui qui est chargé)
+/icone/tuerprocess.png
+Arrêter tous les process lancés par ce contexte
+/icone/apropos.png
+À propos de ce que c'est !
+/icone/choisir.png
+Choisir un contexte pour modifier ou démarrer
+/icone/nouvproj.png
+Créer un nouveau projet
+/icone/nouvcont.png
+Créer un nouveau contexte de démarrage dans un projet et le configurer
+/icone/sauvegarder.png
+Sauver la configuration du contexte en cours
+/icone/supprimer.png
+Supprimer l'objet sélectionné
+/icone/poubelle.png
+Supprimer tous les objets de la scène
+/icone/creaconfig.png
+Créer une nouvelle configuration
+/icone/configuration.png
+Modifier la configuration en cours
+/icone/quitter.png
+Tirer le rideau
+/icone/autoquitter.png
+Poser le taquet de fermeture de l'application après démarrage du contexte.
+/icone/chanprio.png
+Modifier la priorité d'un processus
+/icone/liaison.png
+Lier deux objets
+/icone/ficcfg.png
+Lier un fichier configuration au logiciel
+/icone/fictrv.png
+Lier un fichier de travail au logiciel
+/icone/recadrer.png
+Centrer le schéma
+

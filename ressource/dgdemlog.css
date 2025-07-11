@@ -1,0 +1,37 @@
+
+#fenappli{
+  background-color:  rgb(42,50,32);
+}
+/*
+#titresession{
+  background-color:	rgb(105,115,85);
+  padding:          3px 10px 3px 10px;
+  font: 15px "";
+}
+*/
+#labelsession{
+  background-color:	rgb(42,50,32);
+  padding:          3px 10px 3px 40px;/* top right bottom left */
+  font:	20px "";
+  color:			rgb(240,240,240);
+}
+#barreicon{
+  background-color:  rgb(37,87,135);
+  border:           solid rgb(14,55,95) 2px;
+  border-radius:    8px;
+}
+#tourimage{
+  border-radius:    4px;
+}
+#icone01{
+  background-color:  rgb(37,87,135);
+  border:           solid rgb(14,55,95) 2px;
+  border-radius:    4px;
+  padding:          1px 1px 1px 1px;/* top right bottom left */
+}
+#zonegraphe{
+  background-color: rgb(60,75,80);
+  border:           solid white 1px;
+  border-radius:    8px;
+}
+

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/icone">
+    <file>apropos.png</file>
+    <file>attache.png</file>
+    <file>choisir.png</file>
+    <file>configuration.png</file>
+    <file>creaconfig.png</file>
+    <file>demarre.png</file>
+    <file>dgdemlogstart.png</file>
+    <file>ficcfg.png</file>
+    <file>fictrv.png</file>
+    <file>liaison.png</file>
+    <file>nouvcont.png</file>
+    <file>nouvproj.png</file>
+    <file>poubelle.png</file>
+    <file>quitter.png</file>
+    <file>autoquitter.png</file>
+    <file>recadrer.png</file>
+    <file>sauvegarder.png</file>
+    <file>supprimer.png</file>
+    <file>tuerprocess.png</file>
+    <file>chanprio.png</file>
+    <file>alt_quitter.png</file>
+    <file>alt_sauvegarder.png</file>
+    <file>alt_supprimer.png</file>
+  </gresource>
+  <gresource prefix="/fichiertexte">	  	  
+    <file>dgdemlog.css</file>
+    <file>dgdemlog-phr-menu.txt</file>
+    <file>dgdemlog-phr-var.txt</file>
+  </gresource>  
+</gresources>

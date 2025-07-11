@@ -1,0 +1,8 @@
+Racine de l'environnement du logiciel
+chm_racine
+Chemin des projets
+chm_projet
+Chemin du contexte
+chm_contexte
+Chemin des fichiers standards
+chm_standard
